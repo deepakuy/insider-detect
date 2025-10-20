@@ -1,0 +1,13 @@
+﻿__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.pkl
+*.h5
+data/*.csv
+.env
+.DS_Store
+node_modules/
+frontend/dist/
+postgres_data/
+redis_data/

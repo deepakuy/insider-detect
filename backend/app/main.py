@@ -211,6 +211,21 @@ async def metrics():
     """Prometheus metrics endpoint."""
     return generate_latest()
 
+# Simple healthcheck to support frontend dashboard
+@app.get("/api/health")
+async def health():
+    """Healthcheck endpoint for dashboard."""
+    return {"status": "ok"}
+
+# Minimal incidents endpoint to avoid 404s on the dashboard
+@app.get("/api/incidents")
+async def get_incidents(status: Optional[str] = None):
+    """
+    Incident list endpoint.
+    Placeholder implementation returning an empty list for compatibility.
+    """
+    return []
+
 @app.post("/api/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""

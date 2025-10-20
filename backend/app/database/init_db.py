@@ -10,7 +10,7 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-from .models import Base, User, MITREMapping
+from models import Base, User, MITREMapping
 
 # Load environment variables
 load_dotenv()

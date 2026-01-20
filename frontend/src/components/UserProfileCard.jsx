@@ -155,12 +155,11 @@ const UserProfileCard = () => {
             </div>
             <div className="w-full bg-slate-700 rounded-full h-2">
               <motion.div
-                className={`h-2 rounded-full ${
-                  selectedUser.risk_score >= 0.8 ? 'bg-threat-critical' :
-                  selectedUser.risk_score >= 0.6 ? 'bg-threat-high' :
-                  selectedUser.risk_score >= 0.4 ? 'bg-threat-medium' :
-                  'bg-threat-low'
-                }`}
+                className={`h-2 rounded-full ${selectedUser.risk_score >= 0.8 ? 'bg-threat-critical' :
+                    selectedUser.risk_score >= 0.6 ? 'bg-threat-high' :
+                      selectedUser.risk_score >= 0.4 ? 'bg-threat-medium' :
+                        'bg-threat-low'
+                  }`}
                 initial={{ width: 0 }}
                 animate={{ width: `${selectedUser.risk_score * 100}%` }}
                 transition={{ duration: 1, ease: 'easeOut' }}
@@ -213,10 +212,13 @@ const UserProfileCard = () => {
               <TrendingUp className="w-4 h-4" />
               <span>View Timeline</span>
             </Link>
-            <button className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-slate-700/50 text-gray-300 rounded-lg hover:bg-slate-700 transition-colors text-sm">
+            <Link
+              to={`/investigate/${selectedUser.id}`}
+              className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-slate-700/50 text-gray-300 rounded-lg hover:bg-slate-700 transition-colors text-sm"
+            >
               <Shield className="w-4 h-4" />
               <span>Investigate</span>
-            </button>
+            </Link>
           </div>
         </motion.div>
       )}

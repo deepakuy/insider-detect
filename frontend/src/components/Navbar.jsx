@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  Shield, 
-  BarChart3, 
-  Users, 
-  AlertTriangle, 
-  LogOut, 
-  Menu, 
+import {
+  Shield,
+  BarChart3,
+  Users,
+  AlertTriangle,
+  LogOut,
+  Menu,
   X,
   User,
   Settings,
@@ -64,11 +64,10 @@ const Navbar = () => {
                 <Link
                   key={item.name}
                   to={item.href}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                    isActive(item.href)
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${isActive(item.href)
                       ? 'bg-cyber-accent/20 text-cyber-accent border border-cyber-accent/30'
                       : 'text-gray-300 hover:text-white hover:bg-slate-800/50'
-                  }`}
+                    }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.name}</span>
@@ -80,14 +79,16 @@ const Navbar = () => {
           {/* Right side - Notifications and User Menu */}
           <div className="flex items-center space-x-4">
             {/* Notifications */}
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="relative p-2 text-gray-400 hover:text-white transition-colors duration-200"
-            >
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-threat-critical rounded-full animate-pulse"></span>
-            </motion.button>
+            <Link to="/notifications">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="relative p-2 text-gray-400 hover:text-white transition-colors duration-200"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-threat-critical rounded-full animate-pulse"></span>
+              </motion.button>
+            </Link>
 
             {/* User Menu */}
             <div className="relative">
@@ -165,11 +166,10 @@ const Navbar = () => {
                       key={item.name}
                       to={item.href}
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
-                        isActive(item.href)
+                      className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${isActive(item.href)
                           ? 'bg-cyber-accent/20 text-cyber-accent border border-cyber-accent/30'
                           : 'text-gray-300 hover:text-white hover:bg-slate-800/50'
-                      }`}
+                        }`}
                     >
                       <Icon className="w-5 h-5" />
                       <span>{item.name}</span>

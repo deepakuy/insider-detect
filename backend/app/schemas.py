@@ -58,9 +58,40 @@ class UserTimelineResponse(BaseModel):
         from_attributes = True
 
 
+
+class UserOut(BaseModel):
+    username: str
+    email: str
+    role: str
+
+    class Config:
+        from_attributes = True
+
+
+
+class NotificationResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    message: str
+    type: str
+    read: bool
+
+    class Config:
+        from_attributes = True
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+    class Config:
+        from_attributes = True
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserOut
 
     class Config:
         from_attributes = True
@@ -73,10 +104,4 @@ class TokenData(BaseModel):
         from_attributes = True
 
 
-class UserOut(BaseModel):
-    username: str
-    email: str
-    role: str
 
-    class Config:
-        from_attributes = True

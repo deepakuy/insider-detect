@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Toaster } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +9,10 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import UserTimeline from './pages/UserTimeline';
 import Incidents from './pages/Incidents';
+import Users from './pages/Users';
+import Settings from './pages/Settings';
+import Notifications from './pages/Notifications';
+import Investigate from './pages/Investigate';
 
 // Components
 import Navbar from './components/Navbar';
@@ -17,11 +21,11 @@ import LoadingSpinner from './components/LoadingSpinner';
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  
+
   if (loading) {
     return <LoadingSpinner />;
   }
-  
+
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
@@ -38,6 +42,117 @@ const PageTransition = ({ children }) => (
   </motion.div>
 );
 
+const AppRoutes = () => {
+  const location = useLocation();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route
+          path="/login"
+          element={
+            <PageTransition>
+              <Login />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <Dashboard />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/timeline/:userId"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <UserTimeline />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/incidents"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <Incidents />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <Users />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <Settings />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <Notifications />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/investigate/:userId?"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <Investigate />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -47,60 +162,9 @@ function App() {
           <div className="fixed inset-0 bg-gradient-to-br from-cyber-darker via-slate-900 to-cyber-darker">
             <div className="absolute inset-0 particles-bg opacity-20"></div>
           </div>
-          
-          <AnimatePresence mode="wait">
-            <Routes>
-              <Route 
-                path="/login" 
-                element={
-                  <PageTransition>
-                    <Login />
-                  </PageTransition>
-                } 
-              />
-              <Route 
-                path="/dashboard" 
-                element={
-                  <ProtectedRoute>
-                    <PageTransition>
-                      <div className="relative z-10">
-                        <Navbar />
-                        <Dashboard />
-                      </div>
-                    </PageTransition>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/timeline/:userId" 
-                element={
-                  <ProtectedRoute>
-                    <PageTransition>
-                      <div className="relative z-10">
-                        <Navbar />
-                        <UserTimeline />
-                      </div>
-                    </PageTransition>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/incidents" 
-                element={
-                  <ProtectedRoute>
-                    <PageTransition>
-                      <div className="relative z-10">
-                        <Navbar />
-                        <Incidents />
-                      </div>
-                    </PageTransition>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </AnimatePresence>
-          
+
+          <AppRoutes />
+
           {/* Toast Notifications */}
           <Toaster
             position="top-right"

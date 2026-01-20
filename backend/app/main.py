@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import joblib
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -27,9 +27,10 @@ sys.path.append(str(Path(__file__).resolve().parent))
 
 from database.database import get_db
 from database.models import User, Event, Alert, MonitoredUser, MITREMapping
+from database.init_db import init_db
 from schemas import (
     EventInput, PredictionResponse, AlertResponse, UserTimelineResponse,
-    Token, TokenData, UserOut
+    Token, TokenData, UserOut, LoginResponse, NotificationResponse
 )
 from features.engineering import FeatureEngineer
 
@@ -68,7 +69,7 @@ app.add_middleware(
 )
 
 # Security
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 # Redis client
@@ -95,9 +96,9 @@ def load_ml_models():
         rf_model = joblib.load(model_dir / "rf_model.pkl")
         xgb_model = joblib.load(model_dir / "xgb_model.pkl")
         scaler = joblib.load(model_dir / "scaler.pkl")
-        print("âœ… ML models loaded successfully")
+        print("✅ ML models loaded successfully")
     except Exception as e:
-        print(f"âŒ Error loading ML models: {e}")
+        print(f"❌ Error loading ML models: {e}")
         raise
 
 def map_to_mitre(threat_type: str, event_type: str) -> tuple[str, str]:
@@ -205,17 +206,59 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     return user
 
+# Startup Readiness Flag
+STARTUP_COMPLETE = False
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup."""
-    print("ðŸš€ Starting Insider Threat Detection API...")
+    global STARTUP_COMPLETE
+    print("🚀 Starting Insider Threat Detection API...")
+    
+    # --- DATABASE INITIALIZATION ---
+    try:
+        init_db()
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+    
+    # --- AUTOMATED ARTIFACT RESTORATION ---
+    # Check if critical model artifacts exist
+    rf_path = Path(MODEL_PATH) / "rf_model.pkl"
+    if not rf_path.exists():
+        print("⚠️  ML Artifacts not found. Initiating automated restoration...")
+        import subprocess
+        
+        # 1. Check for Dataset
+        data_csv = Path("/data/synthetic_events.csv")
+        if not data_csv.exists():
+            print("   Generating synthetic dataset (this may take 10-20 seconds)...")
+            try:
+                subprocess.run(["python", "/data/synthetic_generator.py"], check=True, cwd="/")
+                print("   ✅ Dataset generated successfully.")
+            except Exception as e:
+                print(f"   ❌ Failed to generate dataset: {e}")
+                raise
+        else:
+             print("   ✅ Dataset found at /data/synthetic_events.csv")
+
+        # 2. Run Training
+        print("   Training ML models (this may take 10-20 seconds)...")
+        try:
+            # train.py is at /app/models/train.py
+            subprocess.run(["python", "/app/models/train.py"], check=True, cwd="/app")
+            print("   ✅ Models trained successfully.")
+        except Exception as e:
+             print(f"   ❌ Failed to train models: {e}")
+             raise
+
     load_ml_models()
-    print("âœ… API ready!")
+    STARTUP_COMPLETE = True
+    print("✅ API ready!")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    print("ðŸ›‘ Shutting down API...")
+    print("🛑 Shutting down API...")
 
 @app.get("/")
 async def root():
@@ -229,8 +272,11 @@ async def metrics():
 
 # Simple healthcheck to support frontend dashboard
 @app.get("/api/health")
-async def health():
+async def health(response: Response):
     """Healthcheck endpoint for dashboard."""
+    if not STARTUP_COMPLETE:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "starting", "detail": "ML models loading"}
     return {"status": "ok"}
 
 # Minimal incidents endpoint to avoid 404s on the dashboard
@@ -242,7 +288,7 @@ async def get_incidents(status: Optional[str] = None):
     """
     return []
 
-@app.post("/api/auth/login", response_model=Token)
+@app.post("/api/auth/login", response_model=LoginResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
     REQUEST_COUNT.labels(method="POST", endpoint="/api/auth/login").inc()
@@ -263,7 +309,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": user
+    }
 
 @app.post("/api/events/ingest")
 async def ingest_event(event: EventInput, db: Session = Depends(get_db)):
@@ -419,7 +469,29 @@ async def get_user_timeline(
         } for alert in alerts]
     )
 
-@app.get("/api/users/me", response_model=UserOut)
+@app.get("/api/users", response_model=List[UserOut])
+async def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all users."""
+    users = db.query(User).all()
+    return [
+        UserOut(username=u.username, email=u.email, role=u.role) for u in users
+    ]
+
+@app.get("/api/notifications", response_model=List[NotificationResponse])
+async def get_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get user notifications (mocked from alerts for now)."""
+    # Reuse alerts as notifications for simplicity as per requirements
+    alerts = db.query(Alert).filter(Alert.user_id == current_user.username).order_by(Alert.timestamp.desc()).limit(10).all()
+    
+    return [
+        NotificationResponse(
+            id=a.id,
+            timestamp=a.timestamp,
+            message=a.description or "Security Alert",
+            type="alert",
+            read=False
+        ) for a in alerts
+    ]
 async def read_users_me(current_user: User = Depends(get_current_user)):
     """Get current user information."""
     return UserOut(

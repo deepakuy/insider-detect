@@ -20,11 +20,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Check for existing token on app load
     const savedToken = localStorage.getItem('auth_token');
-    const savedUser = localStorage.getItem('auth_user');
-    
-    if (savedToken && savedUser) {
+
+    if (savedToken) {
       setToken(savedToken);
-      setUser(JSON.parse(savedUser));
     }
     setLoading(false);
   }, []);
@@ -34,21 +32,24 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       const response = await apiService.login(username, password);
 
+      // Expecting { access_token, user: { username, role, ... } }
       const { access_token, user: userData } = response || {};
 
-      // Fallback: if backend doesn't return user object, construct minimal user
-      const resolvedUser = userData || { username, role: 'analyst' };
+      if (!userData || !access_token) {
+        throw new Error('Invalid response from server');
+      }
 
       setToken(access_token);
-      setUser(resolvedUser);
+      setUser(userData);
 
-      // Persist token and user for interceptors and session continuity
-      localStorage.setItem('auth_token', access_token || '');
-      localStorage.setItem('auth_user', JSON.stringify(resolvedUser));
+      // Persist token only
+      localStorage.setItem('auth_token', access_token);
+      // localStorage.setItem('auth_user') is REMOVED per strict rules
 
-      toast.success(`Welcome back${resolvedUser?.username ? `, ${resolvedUser.username}` : ''}!`);
+      toast.success(`Welcome back, ${userData.username}!`);
       return { success: true };
     } catch (error) {
+      console.error('Login error:', error);
       toast.error(error.message || 'Login failed');
       return { success: false, error: error.message };
     } finally {

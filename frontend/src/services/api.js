@@ -26,7 +26,7 @@ api.interceptors.request.use(
         url: `${config.baseURL || ''}${config.url}`,
         hasAuth: !!token,
       });
-    } catch (_) {}
+    } catch (_) { }
     return config;
   },
   (error) => {
@@ -43,7 +43,7 @@ api.interceptors.response.use(
         url: response.config?.url,
         status: response.status,
       });
-    } catch (_) {}
+    } catch (_) { }
     return response;
   },
   (error) => {
@@ -54,16 +54,16 @@ api.interceptors.response.use(
         status: error.response?.status,
         message: error.response?.data?.detail || error.message,
       });
-    } catch (_) {}
+    } catch (_) { }
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
       window.location.href = '/login';
     }
-    
+
     const message = error.response?.data?.detail || error.message || 'An error occurred';
     toast.error(message);
-    
+
     return Promise.reject(error);
   }
 );
@@ -92,13 +92,13 @@ export const apiService = {
     const formData = new URLSearchParams();
     formData.append('username', username);
     formData.append('password', password);
-    
+
     const response = await api.post('/auth/login', formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
-    
+
     return response.data;
   },
 
@@ -162,6 +162,11 @@ export const apiService = {
 
   getUserProfile: async (userId) => {
     const response = await api.get(`/users/${userId}`);
+    return response.data;
+  },
+
+  getNotifications: async () => {
+    const response = await api.get('/notifications');
     return response.data;
   },
 };

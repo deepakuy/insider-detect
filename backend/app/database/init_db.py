@@ -9,6 +9,7 @@ from passlib.context import CryptContext
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+import bcrypt
 
 from models import Base, User, MITREMapping
 
@@ -72,7 +73,11 @@ def create_default_users():
     ]
 
     for username, email, password, role in users:
-        hashed_pw = pwd_context.hash(password)
+        # Use bcrypt directly to avoid passlib issues
+        password_bytes = password.encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed_pw = bcrypt.hashpw(password_bytes, salt).decode('utf-8')
+        
         new_user = User(
             username=username,
             email=email,

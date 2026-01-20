@@ -142,7 +142,16 @@ def get_threat_level(score: float) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except:
+        # Fallback to direct bcrypt verification
+        import bcrypt
+        password_bytes = plain_password.encode('utf-8')
+        try:
+            return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
+        except:
+            return False
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
@@ -150,11 +159,18 @@ def get_password_hash(password: str) -> str:
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     """Authenticate a user with username and password."""
+    print(f"Looking for user: {username}")
     user = db.query(User).filter(User.username == username).first()
     if not user:
+        print(f"User {username} not found in database")
         return None
+    
+    print(f"User found: {user.username}, checking password...")
     if not verify_password(password, user.hashed_password):
+        print(f"Password verification failed for {username}")
         return None
+    
+    print(f"Password verification successful for {username}")
     return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -231,13 +247,18 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     """Authenticate user and return JWT token."""
     REQUEST_COUNT.labels(method="POST", endpoint="/api/auth/login").inc()
     
+    print(f"Login attempt for username: {form_data.username}")
+    
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        print(f"Authentication failed for username: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    print(f"Authentication successful for username: {form_data.username}")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires

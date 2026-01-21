@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import joblib
-from fastapi import FastAPI, HTTPException, Depends, status, Response
+from fastapi import FastAPI, HTTPException, Depends, status, Response, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -26,13 +26,16 @@ from prometheus_client import Counter, Histogram, generate_latest
 sys.path.append(str(Path(__file__).resolve().parent))
 
 from database.database import get_db
-from database.models import User, Event, Alert, MonitoredUser, MITREMapping
+from database.models import User, Event, Alert, MonitoredUser, MITREMapping, Incident, IncidentActivity
 from database.init_db import init_db
 from schemas import (
     EventInput, PredictionResponse, AlertResponse, UserTimelineResponse,
-    Token, TokenData, UserOut, LoginResponse, NotificationResponse
+    Token, TokenData, UserOut, LoginResponse, NotificationResponse,
+    StatsResponse, IncidentResponse, IncidentDetailResponse,
+    IncidentStatusUpdate, IncidentActivityResponse
 )
 from features.engineering import FeatureEngineer
+from simulation import Simulator
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -280,13 +283,216 @@ async def health(response: Response):
     return {"status": "ok"}
 
 # Minimal incidents endpoint to avoid 404s on the dashboard
-@app.get("/api/incidents")
-async def get_incidents(status: Optional[str] = None):
+
+@app.get("/api/stats", response_model=StatsResponse)
+async def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get dashboard statistics."""
+    # Efficient counting
+    total_alerts = db.query(Alert).count()
+    active_incidents = db.query(Incident).filter(Incident.status == "open").count()
+    monitored_users = db.query(MonitoredUser).count()
+    
+    # Calculate threat level from recent high-sev alerts (last 24h)
+    recent_critical = db.query(Alert).filter(
+        Alert.threat_level == "critical",
+        Alert.timestamp >= datetime.utcnow() - timedelta(hours=24)
+    ).count()
+    
+    # Simple algorithm for global threat level
+    threat_level = min(0.95, (recent_critical * 0.1) + 0.1)
+    
+    return StatsResponse(
+        total_alerts=total_alerts,
+        active_incidents=active_incidents,
+        monitored_users=monitored_users,
+        system_status="healthy" if STARTUP_COMPLETE else "degraded",
+        threat_level=threat_level
+    )
+
+@app.get("/api/incidents", response_model=List[IncidentResponse])
+async def get_incidents(status: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get incidents."""
+    query = db.query(Incident)
+    if status:
+        query = query.filter(Incident.status == status)
+    return query.order_by(Incident.updated_at.desc()).all()
+
+@app.get("/api/incidents/{incident_id}", response_model=IncidentDetailResponse)
+async def get_incident_detail(
+    incident_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get full incident details with alerts and activity log."""
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    return IncidentDetailResponse(
+        incident=incident,
+        alerts=incident.alerts,
+        activities=incident.activities
+    )
+
+
+
+@app.patch("/api/incidents/{incident_id}/status", response_model=IncidentResponse)
+async def update_incident_status(
+    incident_id: int,
+    update: IncidentStatusUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update incident status and log activity."""
+    # Normalize status to lowercase
+    new_status = update.status.lower().strip()
+    
+    # Validate allowed statuses
+    allowed_statuses = {"open", "investigating", "contained", "closed"}
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid status '{new_status}'. Allowed: {', '.join(allowed_statuses)}"
+        )
+    
+    try:
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        
+        # Update status
+        old_status = incident.status
+        incident.status = new_status
+        incident.updated_at = datetime.utcnow()
+        
+        # Log activity to timeline
+        activity = IncidentActivity(
+            incident_id=incident.id,
+            action="status_change",
+            analyst_id=current_user.username,
+            details=f"Status changed from {old_status} to {new_status}. Comment: {update.comment or 'None'}",
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(activity)
+        db.commit()
+        db.refresh(incident)
+        
+        return incident
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating incident status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update incident status")
+
+@app.get("/api/timeline", response_model=List[Dict[str, Any]])
+async def get_overall_timeline(
+    limit: int = 100,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
-    Incident list endpoint.
-    Placeholder implementation returning an empty list for compatibility.
+    Get aggregated timeline of all system activity (Events + Incident Activities).
+    Useful for forensic overview.
     """
-    return []
+    # 1. Fetch recent events
+    events = db.query(Event).order_by(Event.timestamp.desc()).limit(limit).all()
+    
+    # 2. Fetch recent incident activities
+    activities = db.query(IncidentActivity).order_by(IncidentActivity.timestamp.desc()).limit(limit).all()
+    
+    timeline = []
+    
+    for e in events:
+        timeline.append({
+            "type": "event",
+            "timestamp": e.timestamp,
+            "details": f"{e.event_type} by {e.user_id}",
+            "metadata": {"src_ip": e.src_ip, "success": e.success}
+        })
+        
+    for a in activities:
+        timeline.append({
+            "type": "analyst_activity",
+            "timestamp": a.timestamp,
+            "details": f"{a.action} by {a.analyst_id}",
+            "metadata": {"details": a.details, "incident_id": a.incident_id}
+        })
+        
+    # Sort combined list
+    timeline.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    return timeline[:limit]
+
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+# WebSocket Manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: Dict[str, Any]):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                print(f"Error broadcasting message: {e}")
+                
+ws_manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            # Just keep connection alive, we primarily push data
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        ws_manager.disconnect(websocket)
+
+@app.get("/api/simulate/scenarios")
+async def get_simulation_scenarios(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get available attack simulation scenarios (Admin only)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    
+    sim = Simulator(db)
+    return sim.get_scenarios()
+
+@app.post("/api/simulate/attack")
+async def run_simulation(
+    scenario_id: str = Body(..., embed=True), 
+    target_user: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    """Run an attack simulation (Admin only)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    
+    sim = Simulator(db, ws_manager)
+    try:
+        result = await sim.run_simulation(scenario_id, target_user)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Simulation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/auth/login", response_model=LoginResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -492,6 +698,7 @@ async def get_notifications(current_user: User = Depends(get_current_user), db: 
             read=False
         ) for a in alerts
     ]
+@app.get("/api/auth/me", response_model=UserOut)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     """Get current user information."""
     return UserOut(

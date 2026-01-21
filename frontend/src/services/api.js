@@ -102,10 +102,22 @@ export const apiService = {
     return response.data;
   },
 
+  getCurrentUser: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+  },
+
   // Health check
   getHealth: async () => {
     return requestWithRetry(async () => {
       const response = await api.get('/health');
+      return response.data;
+    });
+  },
+
+  getStats: async () => {
+    return requestWithRetry(async () => {
+      const response = await api.get('/stats');
       return response.data;
     });
   },
@@ -130,15 +142,28 @@ export const apiService = {
   },
 
   // Incidents
-  getIncidents: async (status = 'open') => {
+  getIncidents: async (status = null) => {
     return requestWithRetry(async () => {
-      const response = await api.get(`/incidents?status=${status}`);
+      const config = status ? { params: { status } } : {};
+      const response = await api.get('/incidents', config);
       return response.data;
     });
   },
 
-  updateIncident: async (incidentId, updates) => {
-    const response = await api.patch(`/incidents/${incidentId}`, updates);
+  getIncident: async (id) => {
+    return requestWithRetry(async () => {
+      const response = await api.get(`/incidents/${id}`);
+      return response.data;
+    });
+  },
+
+  updateIncidentStatus: async (id, status, comment = null) => {
+    const response = await api.patch(`/incidents/${id}/status`, { status, comment });
+    return response.data;
+  },
+
+  getTimeline: async (limit = 100) => {
+    const response = await api.get('/timeline', { params: { limit } });
     return response.data;
   },
 
@@ -169,6 +194,24 @@ export const apiService = {
     const response = await api.get('/notifications');
     return response.data;
   },
+
+  // Simulation (Admin only)
+  getScenarios: async () => {
+    return requestWithRetry(async () => {
+      const response = await api.get('/simulate/scenarios');
+      return response.data;
+    });
+  },
+
+  runSimulation: async (scenarioId, targetUser) => {
+    return requestWithRetry(async () => {
+      const response = await api.post('/simulate/attack', {
+        scenario_id: scenarioId,
+        target_user: targetUser
+      });
+      return response.data;
+    });
+  }
 };
 
 export default api;

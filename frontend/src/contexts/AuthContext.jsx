@@ -18,13 +18,24 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token on app load
-    const savedToken = localStorage.getItem('auth_token');
+    const initAuth = async () => {
+      const savedToken = localStorage.getItem('auth_token');
 
-    if (savedToken) {
-      setToken(savedToken);
-    }
-    setLoading(false);
+      if (savedToken) {
+        setToken(savedToken);
+        try {
+          const userData = await apiService.getCurrentUser();
+          setUser(userData);
+        } catch (error) {
+          console.error('Failed to rehydrate user:', error);
+          localStorage.removeItem('auth_token');
+          setToken(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const login = async (username, password, rememberMe = false) => {

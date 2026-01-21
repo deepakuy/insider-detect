@@ -7,25 +7,33 @@ import ThreatLevelMeter from '../components/ThreatLevelMeter';
 import RecentIncidents from '../components/RecentIncidents';
 import UserProfileCard from '../components/UserProfileCard';
 import MITREChain from '../components/MITREChain';
-import { 
-  Activity, 
-  AlertTriangle, 
-  Users, 
-  Shield, 
+import AdminSimulationControl from '../components/AdminSimulationControl';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  Activity,
+  AlertTriangle,
+  Users,
+  Shield,
   TrendingUp,
   Clock,
   Eye,
-  Zap
+
+  Zap,
+  Play
 } from 'lucide-react';
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const [isSimModalOpen, setIsSimModalOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState({
     alerts: [],
     incidents: [],
     systemHealth: null,
-    threatLevel: 0.3,
+    threatLevel: 0.0,
     totalUsers: 0,
     activeThreats: 0,
+    totalAlerts: 0,
+    activeIncidents: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -33,30 +41,99 @@ const Dashboard = () => {
   useEffect(() => {
     fetchDashboardData();
     const interval = setInterval(fetchDashboardData, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+
+    // WebSocket Connection
+    let ws = null;
+    try {
+      ws = new WebSocket('ws://localhost:8000/ws');
+
+      ws.onopen = () => {
+        console.log('✅ Connected to Real-time Event Stream');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          handleWebSocketMessage(message);
+        } catch (e) {
+          console.error('Error parsing WebSocket message:', e);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.warn('WebSocket connection error:', error);
+      };
+
+    } catch (e) {
+      console.error('Failed to initialize WebSocket:', e);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (ws) ws.close();
+    };
   }, []);
+
+  const handleWebSocketMessage = (message) => {
+    console.log('received ws message', message);
+    if (!message || !message.type) return;
+
+    setDashboardData(prev => {
+      const newState = { ...prev };
+
+      switch (message.type) {
+        case 'new_alert':
+          // Add new alert to top of list
+          newState.alerts = [message.alert, ...prev.alerts].slice(0, 50);
+          newState.totalAlerts += 1;
+          if (message.alert.threat_level === 'critical' || message.alert.threat_level === 'high') {
+            newState.activeThreats += 1;
+          }
+          break;
+
+        case 'new_incident':
+          newState.incidents = [message.incident, ...prev.incidents].slice(0, 20);
+          newState.activeIncidents += 1;
+          break;
+
+        case 'simulation_start':
+          // Could show a toast or indicator
+          console.log(`Simulation started: ${message.scenario}`);
+          break;
+
+        default:
+          break;
+      }
+
+      // Recalculate threat level if needed or just wait for next fetch
+      // For immediate visual impact, let's bump threat level if alert is critical
+      if (message.type === 'new_alert' && message.alert.threat_level === 'critical') {
+        newState.threatLevel = Math.min(1.0, prev.threatLevel + 0.05);
+      }
+
+      return newState;
+    });
+  };
 
   const fetchDashboardData = async () => {
     try {
       console.log('Fetching dashboard data...');
-      const [alerts, incidents, health] = await Promise.all([
-        apiService.getRecentAlerts(20).then((d) => { console.log('Alerts loaded:', d); return d; }),
-        apiService.getIncidents('open').then((d) => { console.log('Incidents loaded:', d); return d; }),
-        apiService.getHealth().then((d) => { console.log('Health loaded:', d); return d; }),
+      const [stats, alerts, incidents, health] = await Promise.all([
+        apiService.getStats().catch(err => { console.error("Stats failed", err); return { total_alerts: 0, active_incidents: 0, monitored_users: 0, threat_level: 0 }; }),
+        apiService.getRecentAlerts(20).catch(err => []),
+        apiService.getIncidents('open').catch(err => []),
+        apiService.getHealth().catch(err => ({ status: 'unknown' })),
       ]);
-
-      // Calculate threat level based on recent alerts
-      const criticalAlerts = alerts.filter(alert => alert.threat_level === 'critical').length;
-      const highAlerts = alerts.filter(alert => alert.threat_level === 'high').length;
-      const threatLevel = Math.min(0.9, (criticalAlerts * 0.3 + highAlerts * 0.1) / 10);
 
       setDashboardData({
         alerts,
         incidents,
         systemHealth: health,
-        threatLevel,
-        totalUsers: 150, // Mock data
+        threatLevel: stats.threat_level,
+        totalUsers: stats.monitored_users,
         activeThreats: alerts.filter(alert => alert.threat_level === 'critical' || alert.threat_level === 'high').length,
+        totalAlerts: stats.total_alerts,
+        activeIncidents: stats.active_incidents
       });
     } catch (err) {
       console.error('Error loading dashboard:', err);
@@ -95,7 +172,7 @@ const Dashboard = () => {
   const stats = [
     {
       name: 'Total Alerts',
-      value: formatNumber(dashboardData.alerts.length),
+      value: formatNumber(dashboardData.totalAlerts),
       change: '+12%',
       changeType: 'increase',
       icon: AlertTriangle,
@@ -103,7 +180,7 @@ const Dashboard = () => {
     },
     {
       name: 'Active Incidents',
-      value: formatNumber(dashboardData.incidents.length),
+      value: formatNumber(dashboardData.activeIncidents),
       change: '-5%',
       changeType: 'decrease',
       icon: Shield,
@@ -119,7 +196,7 @@ const Dashboard = () => {
     },
     {
       name: 'System Health',
-      value: dashboardData.systemHealth?.status === 'healthy' ? '100%' : '85%',
+      value: (dashboardData.systemHealth?.status === 'healthy' || dashboardData.systemHealth?.status === 'ok') ? '100%' : '85%',
       change: 'Stable',
       changeType: 'neutral',
       icon: Activity,
@@ -136,8 +213,30 @@ const Dashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-bold text-white mb-2">Security Dashboard</h1>
-          <p className="text-gray-400">Real-time threat monitoring and incident management</p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">Security Dashboard</h1>
+              <p className="text-gray-400">Real-time threat monitoring and incident management</p>
+            </div>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setIsSimModalOpen(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600/20 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-600/30 transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                <span>Simulate Attack</span>
+              </button>
+            )}
+          </div>
+          <AdminSimulationControl
+            isOpen={isSimModalOpen}
+            onClose={() => setIsSimModalOpen(false)}
+            onComplete={() => {
+              fetchDashboardData();
+              // Keep it open briefly or close it? onComplete closes it in my logic above? 
+              // Actually my logic above: onComplete={() => { fetchDashboardData(); setIsSimModalOpen(false); }}
+            }}
+          />
         </motion.div>
 
         {/* Stats Grid */}
@@ -161,11 +260,10 @@ const Dashboard = () => {
                   <div>
                     <p className="text-sm font-medium text-gray-400">{stat.name}</p>
                     <p className="text-2xl font-bold text-white mt-1">{stat.value}</p>
-                    <p className={`text-sm mt-1 ${
-                      stat.changeType === 'increase' ? 'text-green-400' :
+                    <p className={`text-sm mt-1 ${stat.changeType === 'increase' ? 'text-green-400' :
                       stat.changeType === 'decrease' ? 'text-red-400' :
-                      'text-gray-400'
-                    }`}>
+                        'text-gray-400'
+                      }`}>
                       {stat.change}
                     </p>
                   </div>
@@ -187,7 +285,7 @@ const Dashboard = () => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <ThreatLevelMeter 
+              <ThreatLevelMeter
                 threatLevel={dashboardData.threatLevel}
                 activeThreats={dashboardData.activeThreats}
               />

@@ -117,6 +117,21 @@ class Incident(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     alerts = relationship("Alert", back_populates="incident")
+    activities = relationship("IncidentActivity", back_populates="incident", order_by="desc(IncidentActivity.timestamp)")
+
+
+class IncidentActivity(Base):
+    """Log of actions taken on an incident (status changes, comments)"""
+    __tablename__ = "incident_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False, index=True)
+    action = Column(String(50), nullable=False)  # e.g., "status_change", "comment", "system_update"
+    analyst_id = Column(String(50))  # Username of analyst
+    details = Column(Text)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    incident = relationship("Incident", back_populates="activities")
 
 
 class MITREMapping(Base):

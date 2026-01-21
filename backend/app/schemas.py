@@ -105,3 +105,54 @@ class TokenData(BaseModel):
 
 
 
+
+class StatsResponse(BaseModel):
+    total_alerts: int
+    active_incidents: int
+    monitored_users: int
+    system_status: str
+    threat_level: float
+
+    class Config:
+        from_attributes = True
+
+
+class IncidentResponse(BaseModel):
+    id: int
+    incident_number: str
+    user_id: str
+    start_time: datetime
+    end_time: Optional[datetime]
+    severity: str
+    status: str
+    narrative: Optional[str]
+    assigned_to: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class IncidentActivityResponse(BaseModel):
+    id: int
+    incident_id: int
+    action: str
+    analyst_id: Optional[str]
+    details: Optional[str]
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class IncidentDetailResponse(BaseModel):
+    incident: IncidentResponse
+    alerts: List[AlertResponse]
+    activities: List[IncidentActivityResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class IncidentStatusUpdate(BaseModel):
+    status: str  # open, investigating, contained, closed
+    comment: Optional[str] = None

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiService } from '../services/api';
 import { formatDateTime, formatRelativeTime, getStatusColor, getStatusIcon, getThreatLevelColor } from '../utils/formatters';
-import { AlertTriangle, Search, Filter, Eye, Edit, CheckCircle, X, Clock, User, Shield } from 'lucide-react';
+import { AlertTriangle, Search, Filter, Eye, Edit, CheckCircle, X, Clock, User, Shield, ExternalLink } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const Incidents = () => {
+  const navigate = useNavigate();
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -29,81 +32,56 @@ const Incidents = () => {
     }
   };
 
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   const handleStatusUpdate = async (incidentId, newStatus) => {
+    // Map frontend status to backend status values
+    const statusMap = {
+      'investigating': 'investigating',
+      'resolved': 'closed',
+      'false_positive': 'closed',
+      'closed': 'closed',
+      'open': 'open'
+    };
+    const backendStatus = statusMap[newStatus] || newStatus;
+
+    // Generate human-readable comment for timeline
+    const commentMap = {
+      'investigating': 'Analyst started investigation',
+      'resolved': 'Incident marked as resolved',
+      'false_positive': 'Incident marked as false positive',
+      'closed': 'Incident closed'
+    };
+    const comment = commentMap[newStatus] || `Status changed to ${newStatus}`;
+
+    setUpdatingStatus(true);
     try {
-      await apiService.updateIncident(incidentId, { status: newStatus });
-      setIncidents(prev => prev.map(incident => 
-        incident.id === incidentId 
-          ? { ...incident, status: newStatus }
+      await apiService.updateIncidentStatus(incidentId, backendStatus, comment);
+      setIncidents(prev => prev.map(incident =>
+        incident.id === incidentId
+          ? { ...incident, status: backendStatus }
           : incident
       ));
+      toast.success(`Status updated to ${newStatus.toUpperCase().replace('_', ' ')}`);
       setShowModal(false);
     } catch (err) {
       console.error('Failed to update incident:', err);
+      toast.error('Failed to update incident status');
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
   const filteredIncidents = incidents.filter(incident => {
     const matchesSearch = incident.incident_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         incident.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         incident.narrative?.toLowerCase().includes(searchTerm.toLowerCase());
+      incident.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incident.narrative?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || incident.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  // Mock data for demonstration
-  const mockIncidents = [
-    {
-      id: 1,
-      incident_number: 'INC-2024-001',
-      user_id: 'john.doe',
-      start_time: '2024-01-20T10:15:00Z',
-      end_time: null,
-      severity: 'critical',
-      status: 'open',
-      attack_chain: ['Initial Access', 'Execution', 'Exfiltration'],
-      narrative: 'Suspicious data exfiltration activity detected. User accessed multiple confidential files and transferred large amounts of data to external IP addresses.',
-      assigned_to: null,
-      resolution_notes: null,
-      false_positive: false,
-      created_at: '2024-01-20T10:15:00Z',
-      updated_at: '2024-01-20T10:15:00Z',
-    },
-    {
-      id: 2,
-      incident_number: 'INC-2024-002',
-      user_id: 'jane.smith',
-      start_time: '2024-01-20T09:30:00Z',
-      end_time: null,
-      severity: 'high',
-      status: 'investigating',
-      attack_chain: ['Initial Access', 'Privilege Escalation'],
-      narrative: 'Unusual privilege escalation attempt detected. User attempted to access administrative functions outside normal business hours.',
-      assigned_to: 'analyst',
-      resolution_notes: null,
-      false_positive: false,
-      created_at: '2024-01-20T09:30:00Z',
-      updated_at: '2024-01-20T11:00:00Z',
-    },
-    {
-      id: 3,
-      incident_number: 'INC-2024-003',
-      user_id: 'mike.wilson',
-      start_time: '2024-01-19T16:45:00Z',
-      end_time: '2024-01-20T08:30:00Z',
-      severity: 'medium',
-      status: 'resolved',
-      attack_chain: ['Initial Access', 'Discovery'],
-      narrative: 'Automated scanning activity detected from user account. Investigation revealed legitimate security testing activity.',
-      assigned_to: 'admin',
-      resolution_notes: 'Confirmed as legitimate security testing. No further action required.',
-      false_positive: true,
-      created_at: '2024-01-19T16:45:00Z',
-      updated_at: '2024-01-20T08:30:00Z',
-    },
-  ];
-
-  const data = incidents.length > 0 ? incidents : mockIncidents;
+  // Use real data only - no mock fallback
+  const data = incidents;
 
   if (loading) {
     return (
@@ -317,11 +295,16 @@ const Incidents = () => {
                               setShowModal(true);
                             }}
                             className="text-cyber-accent hover:text-cyber-glow transition-colors"
+                            title="Quick View"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          <button className="text-gray-400 hover:text-white transition-colors">
-                            <Edit className="w-4 h-4" />
+                          <button
+                            onClick={() => navigate(`/incidents/${incident.id}`)}
+                            className="text-green-400 hover:text-green-300 transition-colors"
+                            title="Open Investigation"
+                          >
+                            <ExternalLink className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -419,27 +402,39 @@ const Incidents = () => {
 
                 {/* Action Buttons */}
                 <div className="flex space-x-3 pt-4 border-t border-slate-700/50">
-                  <button
-                    onClick={() => handleStatusUpdate(selectedIncident.id, 'investigating')}
-                    className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-threat-high/20 text-threat-high rounded-lg hover:bg-threat-high/30 transition-colors"
-                  >
-                    <Clock className="w-4 h-4" />
-                    <span>Start Investigation</span>
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate(selectedIncident.id, 'resolved')}
-                    className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-threat-low/20 text-threat-low rounded-lg hover:bg-threat-low/30 transition-colors"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Mark Resolved</span>
-                  </button>
-                  <button
-                    onClick={() => handleStatusUpdate(selectedIncident.id, 'false_positive')}
-                    className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-threat-medium/20 text-threat-medium rounded-lg hover:bg-threat-medium/30 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>False Positive</span>
-                  </button>
+                  {selectedIncident.status === 'open' && (
+                    <button
+                      onClick={() => handleStatusUpdate(selectedIncident.id, 'investigating')}
+                      disabled={updatingStatus}
+                      className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-threat-high/20 text-threat-high rounded-lg hover:bg-threat-high/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Clock className="w-4 h-4" />
+                      <span>{updatingStatus ? 'Updating...' : 'Start Investigation'}</span>
+                    </button>
+                  )}
+                  {selectedIncident.status !== 'closed' && (
+                    <>
+                      <button
+                        onClick={() => handleStatusUpdate(selectedIncident.id, 'resolved')}
+                        disabled={updatingStatus}
+                        className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-threat-low/20 text-threat-low rounded-lg hover:bg-threat-low/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>{updatingStatus ? 'Updating...' : 'Mark Resolved'}</span>
+                      </button>
+                      <button
+                        onClick={() => handleStatusUpdate(selectedIncident.id, 'false_positive')}
+                        disabled={updatingStatus}
+                        className="flex-1 flex items-center justify-center space-x-2 py-2 px-4 bg-threat-medium/20 text-threat-medium rounded-lg hover:bg-threat-medium/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>{updatingStatus ? 'Updating...' : 'False Positive'}</span>
+                      </button>
+                    </>
+                  )}
+                  {selectedIncident.status === 'closed' && (
+                    <p className="text-gray-400 text-sm w-full text-center py-2">This incident is closed</p>
+                  )}
                 </div>
               </div>
             </motion.div>

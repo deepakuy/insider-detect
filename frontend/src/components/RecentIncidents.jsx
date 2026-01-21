@@ -1,10 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { formatRelativeTime, getStatusColor, getStatusIcon, getThreatLevelColor } from '../utils/formatters';
 import { AlertTriangle, Clock, User, ArrowRight, Eye } from 'lucide-react';
 
 const RecentIncidents = ({ incidents = [] }) => {
+  const navigate = useNavigate();
+
   const getSeverityIcon = (severity) => {
     const icons = {
       critical: '🚨',
@@ -58,17 +60,18 @@ const RecentIncidents = ({ incidents = [] }) => {
             return (
               <motion.div
                 key={incident.id}
+                onClick={() => navigate(`/incidents/${incident.id}`)}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="p-4 bg-slate-700/30 border border-slate-600/50 rounded-lg hover:border-slate-500/50 transition-all duration-300 group"
+                className="p-4 bg-slate-700/30 border border-slate-600/50 rounded-lg hover:border-slate-500/50 transition-all duration-300 group cursor-pointer"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 flex-1">
                     <div className="flex-shrink-0">
                       <span className="text-lg">{getSeverityIcon(incident.severity)}</span>
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">
                         <h4 className="text-sm font-medium text-white truncate">
@@ -78,11 +81,11 @@ const RecentIncidents = ({ incidents = [] }) => {
                           {incident.severity.toUpperCase()}
                         </span>
                       </div>
-                      
+
                       <p className="text-xs text-gray-400 mb-2 line-clamp-2">
                         {incident.narrative || 'Security incident detected'}
                       </p>
-                      
+
                       <div className="flex items-center space-x-4 text-xs text-gray-500">
                         <div className="flex items-center space-x-1">
                           <User className="w-3 h-3" />
@@ -95,7 +98,7 @@ const RecentIncidents = ({ incidents = [] }) => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <div className="flex items-center space-x-1">
                       <span className="text-sm">{statusIcon}</span>

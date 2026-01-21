@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from './contexts/AuthContext'
-import { 
-  Shield, 
-  AlertTriangle, 
-  Activity, 
-  Users, 
-  TrendingUp, 
+import {
+  Shield,
+  AlertTriangle,
+  Activity,
+  Users,
+  TrendingUp,
   Clock,
   LogOut,
   Menu,
@@ -33,7 +33,7 @@ function Dashboard() {
     try {
       const alertsData = await apiService.getRecentAlerts()
       setAlerts(alertsData)
-      
+
       // Calculate stats
       const newStats = {
         totalAlerts: alertsData.length,
@@ -78,6 +78,21 @@ function Dashboard() {
     </div>
   )
 
+  const [explanation, setExplanation] = useState(null)
+  const [explainingId, setExplainingId] = useState(null)
+
+  const handleExplain = async (alertId) => {
+    setExplainingId(alertId)
+    try {
+      const data = await apiService.explainAlert(alertId)
+      setExplanation(data)
+    } catch (error) {
+      console.error('Failed to explain alert:', error)
+    } finally {
+      setExplainingId(null)
+    }
+  }
+
   const AlertCard = ({ alert }) => (
     <div className="bg-cyber-dark/50 backdrop-blur-sm border border-cyber-accent/30 rounded-lg p-4 hover:border-cyber-accent/50 transition-all duration-200">
       <div className="flex items-start justify-between mb-3">
@@ -94,10 +109,18 @@ function Dashboard() {
       </div>
       <div className="flex items-center justify-between text-sm text-gray-400">
         <span>Score: {alert.threat_score.toFixed(2)}</span>
-        <span className="flex items-center">
-          <Clock className="w-4 h-4 mr-1" />
-          {new Date(alert.timestamp).toLocaleTimeString()}
-        </span>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => handleExplain(alert.id)}
+            className="text-cyber-glow hover:text-cyber-accent hover:underline text-xs flex items-center"
+          >
+            {explainingId === alert.id ? 'Analyzing...' : 'Why was this flagged?'}
+          </button>
+          <span className="flex items-center">
+            <Clock className="w-4 h-4 mr-1" />
+            {new Date(alert.timestamp).toLocaleTimeString()}
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -106,16 +129,15 @@ function Dashboard() {
     <div className="min-h-screen bg-cyber-darker">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-cyber-dark border-r border-cyber-accent/30 transform transition-transform duration-200 ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:translate-x-0`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-cyber-dark border-r border-cyber-accent/30 transform transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0`}>
         <div className="flex items-center justify-between h-16 px-6 border-b border-cyber-accent/30">
           <div className="flex items-center space-x-3">
             <Shield className="w-8 h-8 text-cyber-glow" />
@@ -278,6 +300,64 @@ function Dashboard() {
           </div>
         </main>
       </div>
+
+      {/* Explanation Modal */}
+      {explanation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-cyber-dark border border-cyber-accent/50 rounded-xl max-w-lg w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => setExplanation(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+              <Shield className="w-6 h-6 mr-2 text-cyber-glow" />
+              Alert Explanation
+            </h3>
+
+            <div className="space-y-4">
+              <div className="bg-cyber-accent/10 p-4 rounded-lg border border-cyber-accent/20">
+                <p className="text-white text-sm leading-relaxed whitespace-pre-line">
+                  {explanation.narrative}
+                </p>
+              </div>
+
+              {explanation.feature_contributions && Object.keys(explanation.feature_contributions).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-400 mb-2">Technical Contributors</h4>
+                  <div className="space-y-2">
+                    {Object.entries(explanation.feature_contributions).map(([feature, score]) => (
+                      <div key={feature} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-300 font-mono">{feature}</span>
+                        <div className="flex items-center w-1/2">
+                          <div className="h-2 bg-gray-700 rounded-full flex-1 mr-2 overflow-hidden">
+                            <div
+                              className="h-full bg-cyber-glow"
+                              style={{ width: `${score * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-cyber-glow">{score.toFixed(3)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setExplanation(null)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

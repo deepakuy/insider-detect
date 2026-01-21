@@ -135,6 +135,13 @@ export const apiService = {
     return response.data;
   },
 
+  explainAlert: async (alertId) => {
+    return requestWithRetry(async () => {
+      const response = await api.get(`/alerts/${alertId}/explain`);
+      return response.data;
+    });
+  },
+
   // User Timeline
   getUserTimeline: async (userId, hours = 24) => {
     const response = await api.get(`/users/${userId}/timeline?hours=${hours}`);

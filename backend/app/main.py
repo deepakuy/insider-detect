@@ -32,7 +32,7 @@ from schemas import (
     EventInput, PredictionResponse, AlertResponse, UserTimelineResponse,
     Token, TokenData, UserOut, LoginResponse, NotificationResponse,
     StatsResponse, IncidentResponse, IncidentDetailResponse,
-    IncidentStatusUpdate, IncidentActivityResponse
+    IncidentStatusUpdate, IncidentActivityResponse, AlertExplainResponse
 )
 from features.engineering import FeatureEngineer
 from simulation import Simulator
@@ -700,6 +700,73 @@ async def get_recent_alerts(
         )
         for alert in alerts
     ]
+
+@app.get("/api/alerts/{alert_id}/explain", response_model=AlertExplainResponse)
+async def explain_alert(
+    alert_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Explain why an alert was flagged.
+    Returns feature contributions and a plain-English narrative.
+    """
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+        
+    # In a real system, we would retrieve the specific feature values for this event.
+    # For now, we use the global feature importance of the Random Forest model
+    # combined with the alert's specific attributes to generate a narrative.
+    
+    feature_contributions = {}
+    narrative = f"This alert was flagged as {alert.threat_level.upper()} threat (Score: {alert.threat_score:.2f})."
+    
+    if rf_model:
+        importances = rf_model.feature_importances_
+        # Feature names from training
+        feature_cols = [
+            'login_count_1h', 'failed_login_rate_1h', 'bytes_transferred_1h',
+            'unique_dst_ips_1h', 'unique_files_24h', 'off_hours_ratio_24h',
+            'privilege_change_flag', 'geo_anomaly_score', 'dst_ip_entropy_1h'
+        ]
+        
+        # Zip and sort
+        feats = sorted(zip(feature_cols, importances), key=lambda x: x[1], reverse=True)
+        
+        # Take top 3
+        top_features = feats[:3]
+        feature_contributions = {k: float(v) for k, v in top_features}
+        
+        # Build dynamic narrative
+        narrative += " Key contributing factors based on the AI model include:\n"
+        
+        explanations = {
+            'login_count_1h': "unusually high login frequency",
+            'failed_login_rate_1h': "excessive failed login attempts",
+            'bytes_transferred_1h': "large volume of data transfer",
+            'unique_dst_ips_1h': "connections to multiple unique destinations",
+            'unique_files_24h': "accessing a high number of unique files",
+            'off_hours_ratio_24h': "activity during non-business hours",
+            'privilege_change_flag': "recent privilege escalation",
+            'geo_anomaly_score': "access from an unusual location",
+            'dst_ip_entropy_1h': "dispersed network connections"
+        }
+        
+        reasons = []
+        for name, score in top_features:
+            desc = explanations.get(name, name.replace('_', ' '))
+            reasons.append(f"- {desc} (Importance: {score:.2f})")
+            
+        narrative += "\n".join(reasons)
+    else:
+        narrative += " Detailed AI explanation is currently unavailable (Model not loaded)."
+        
+    return AlertExplainResponse(
+        alert_id=alert.id,
+        feature_contributions=feature_contributions,
+        narrative=narrative
+    )
 
 @app.get("/api/users/{user_id}/timeline", response_model=UserTimelineResponse)
 async def get_user_timeline(

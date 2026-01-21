@@ -47,6 +47,15 @@ class AlertResponse(BaseModel):
         from_attributes = True
 
 
+class AlertExplainResponse(BaseModel):
+    alert_id: int
+    feature_contributions: Dict[str, float]
+    narrative: str
+
+    class Config:
+        from_attributes = True
+
+
 class UserTimelineResponse(BaseModel):
     user_id: str
     total_events: int

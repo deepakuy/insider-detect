@@ -71,51 +71,58 @@ const UserTimeline = () => {
     );
   }
 
-  // Mock data for demonstration
-  const mockTimelineData = {
+  // Use only real API data - no mock fallback
+  const data = timelineData || {
     user_id: userId,
-    total_events: 1247,
-    total_alerts: 8,
-    events: [
-      { timestamp: '2024-01-20T10:00:00Z', event_type: 'login_success', src_ip: '192.168.1.100' },
-      { timestamp: '2024-01-20T10:15:00Z', event_type: 'file_access', file_name: 'confidential.pdf' },
-      { timestamp: '2024-01-20T10:30:00Z', event_type: 'file_transfer', bytes_transferred: 5242880 },
-      { timestamp: '2024-01-20T11:00:00Z', event_type: 'login_success', src_ip: '192.168.1.100' },
-      { timestamp: '2024-01-20T11:15:00Z', event_type: 'file_access', file_name: 'sensitive.xlsx' },
-    ],
-    alerts: [
-      { id: 1, timestamp: '2024-01-20T10:15:00Z', threat_level: 'high', description: 'Unusual file access pattern' },
-      { id: 2, timestamp: '2024-01-20T10:30:00Z', threat_level: 'critical', description: 'Large file transfer detected' },
-    ],
-    hourly_stats: [
-      { hour: '00:00', events: 12, alerts: 0 },
-      { hour: '01:00', events: 8, alerts: 0 },
-      { hour: '02:00', events: 5, alerts: 0 },
-      { hour: '03:00', events: 3, alerts: 0 },
-      { hour: '04:00', events: 7, alerts: 0 },
-      { hour: '05:00', events: 15, alerts: 0 },
-      { hour: '06:00', events: 23, alerts: 0 },
-      { hour: '07:00', events: 45, alerts: 1 },
-      { hour: '08:00', events: 78, alerts: 0 },
-      { hour: '09:00', events: 92, alerts: 0 },
-      { hour: '10:00', events: 156, alerts: 2 },
-      { hour: '11:00', events: 134, alerts: 1 },
-      { hour: '12:00', events: 98, alerts: 0 },
-      { hour: '13:00', events: 87, alerts: 0 },
-      { hour: '14:00', events: 112, alerts: 1 },
-      { hour: '15:00', events: 145, alerts: 0 },
-      { hour: '16:00', events: 167, alerts: 2 },
-      { hour: '17:00', events: 134, alerts: 0 },
-      { hour: '18:00', events: 89, alerts: 0 },
-      { hour: '19:00', events: 56, alerts: 0 },
-      { hour: '20:00', events: 34, alerts: 0 },
-      { hour: '21:00', events: 23, alerts: 0 },
-      { hour: '22:00', events: 18, alerts: 0 },
-      { hour: '23:00', events: 12, alerts: 0 },
-    ],
+    total_events: 0,
+    total_alerts: 0,
+    events: [],
+    alerts: [],
+    hourly_stats: []
   };
 
-  const data = timelineData || mockTimelineData;
+  // Empty state check
+  if (!timelineData || (data.events.length === 0 && data.alerts.length === 0)) {
+    return (
+      <div className="min-h-screen bg-cyber-darker p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center space-x-4 mb-8">
+            <Link
+              to="/dashboard"
+              className="p-2 text-gray-400 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-cyber-accent to-cyber-glow rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white">{userId}</h1>
+                <p className="text-gray-400">User Activity Timeline</p>
+              </div>
+            </div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-xl p-12 text-center"
+          >
+            <Activity className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">No Activity Recorded</h2>
+            <p className="text-gray-400 mb-6">There are no events or alerts recorded for this user yet.</p>
+            <Link
+              to="/users"
+              className="px-6 py-2 bg-cyber-accent text-white rounded-lg hover:bg-cyber-glow transition-colors"
+            >
+              Back to Users
+            </Link>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cyber-darker p-6">

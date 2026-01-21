@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiService } from '../services/api';
 import { User, Shield, AlertTriangle, Search, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Users = () => {
+    const navigate = useNavigate();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -97,7 +99,10 @@ const Users = () => {
                             <p className="text-sm text-gray-400 mb-4">{user.email}</p>
 
                             <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
-                                <button className="text-sm text-cyber-accent hover:text-cyber-glow transition-colors">
+                                <button
+                                    onClick={() => navigate(`/users/${user.username}`)}
+                                    className="text-sm text-cyber-accent hover:text-cyber-glow transition-colors"
+                                >
                                     View Profile
                                 </button>
                                 <div className="flex space-x-2">

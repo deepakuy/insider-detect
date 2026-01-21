@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import UserTimeline from './pages/UserTimeline';
 import Incidents from './pages/Incidents';
 import Users from './pages/Users';
+import UserDetail from './pages/UserDetail';
 import IncidentDetail from './pages/IncidentDetail';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
@@ -117,6 +118,19 @@ const AppRoutes = () => {
                 <div className="relative z-10">
                   <Navbar />
                   <Users />
+                </div>
+              </PageTransition>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users/:username"
+          element={
+            <ProtectedRoute>
+              <PageTransition>
+                <div className="relative z-10">
+                  <Navbar />
+                  <UserDetail />
                 </div>
               </PageTransition>
             </ProtectedRoute>

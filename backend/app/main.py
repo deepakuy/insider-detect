@@ -286,27 +286,86 @@ async def health(response: Response):
 
 @app.get("/api/stats", response_model=StatsResponse)
 async def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get dashboard statistics."""
+    """Get dashboard statistics with dynamic threat level calculation."""
+    import math
+    
     # Efficient counting
     total_alerts = db.query(Alert).count()
-    active_incidents = db.query(Incident).filter(Incident.status == "open").count()
     monitored_users = db.query(MonitoredUser).count()
     
-    # Calculate threat level from recent high-sev alerts (last 24h)
-    recent_critical = db.query(Alert).filter(
-        Alert.threat_level == "critical",
-        Alert.timestamp >= datetime.utcnow() - timedelta(hours=24)
-    ).count()
+    # Count incidents by status
+    open_incidents = db.query(Incident).filter(Incident.status == "open").count()
+    investigating_incidents = db.query(Incident).filter(Incident.status == "investigating").count()
+    contained_incidents = db.query(Incident).filter(Incident.status == "contained").count()
     
-    # Simple algorithm for global threat level
-    threat_level = min(0.95, (recent_critical * 0.1) + 0.1)
+    # Active incidents = open + investigating
+    active_incidents = open_incidents + investigating_incidents
+    
+    # Get closed incident IDs to exclude their alerts
+    closed_incident_ids = [i.id for i in db.query(Incident.id).filter(Incident.status == "closed").all()]
+    
+    # Get recent alerts (last 60 minutes) not linked to closed incidents
+    now = datetime.utcnow()
+    recent_alerts_query = db.query(Alert).filter(
+        Alert.timestamp >= now - timedelta(minutes=60)
+    )
+    if closed_incident_ids:
+        recent_alerts_query = recent_alerts_query.filter(
+            ~Alert.incident_id.in_(closed_incident_ids)
+        )
+    recent_alerts = recent_alerts_query.all()
+    
+    # Calculate threat contribution from alerts with time decay
+    alert_threat = 0.0
+    for alert in recent_alerts:
+        # Base score by threat level
+        base_score = {
+            "critical": 0.25,
+            "high": 0.15,
+            "medium": 0.08,
+            "low": 0.03
+        }.get(alert.threat_level, 0.05)
+        
+        # Time decay: exp(-minutes_since / 30)
+        minutes_since = (now - alert.timestamp).total_seconds() / 60
+        decay = math.exp(-minutes_since / 30)
+        
+        # Check if alert is from simulation (if field exists)
+        is_simulated = getattr(alert, 'is_simulated', False) or False
+        sim_weight = 0.5 if is_simulated else 1.0
+        
+        alert_threat += base_score * decay * sim_weight
+    
+    # Calculate threat contribution from incidents by status
+    incident_threat = (
+        open_incidents * 0.15 +           # Full weight
+        investigating_incidents * 0.10 +   # 0.7 weight (15 * 0.7 ≈ 10)
+        contained_incidents * 0.05         # 0.3 weight (15 * 0.3 ≈ 5)
+    )
+    
+    # Combine threats
+    raw_threat = alert_threat + incident_threat
+    
+    # Apply safety caps
+    if open_incidents == 0 and investigating_incidents == 0:
+        # No active incidents - cap threat at 35%
+        threat_level = min(0.35, raw_threat)
+    else:
+        threat_level = raw_threat
+    
+    # If no recent alerts at all, set baseline
+    if len(recent_alerts) == 0 and open_incidents == 0:
+        threat_level = 0.1
+    
+    # Normalize between 0.0 and 1.0
+    threat_level = max(0.0, min(1.0, threat_level))
     
     return StatsResponse(
         total_alerts=total_alerts,
         active_incidents=active_incidents,
         monitored_users=monitored_users,
         system_status="healthy" if STARTUP_COMPLETE else "degraded",
-        threat_level=threat_level
+        threat_level=round(threat_level, 2)
     )
 
 @app.get("/api/incidents", response_model=List[IncidentResponse])

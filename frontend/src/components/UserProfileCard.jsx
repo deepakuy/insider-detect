@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { formatRelativeTime, getRiskScoreColor, getRiskScoreLabel } from '../utils/formatters';
 import { User, Shield, Activity, AlertTriangle, TrendingUp, Eye, Clock } from 'lucide-react';
+import { apiService } from '../services/api';
 
 const UserProfileCard = () => {
   const [selectedUser, setSelectedUser] = useState(null);
@@ -10,46 +11,36 @@ const UserProfileCard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Mock data for demonstration
-    const mockUsers = [
-      {
-        id: 'user_001',
-        username: 'john.doe',
-        role: 'Senior Developer',
-        department: 'Engineering',
-        risk_score: 0.15,
-        last_activity: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        total_events: 1247,
-        total_alerts: 3,
-        is_flagged: false,
-      },
-      {
-        id: 'user_002',
-        username: 'jane.smith',
-        role: 'Data Analyst',
-        department: 'Analytics',
-        risk_score: 0.65,
-        last_activity: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-        total_events: 892,
-        total_alerts: 12,
-        is_flagged: true,
-      },
-      {
-        id: 'user_003',
-        username: 'mike.wilson',
-        role: 'System Admin',
-        department: 'IT',
-        risk_score: 0.85,
-        last_activity: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
-        total_events: 2156,
-        total_alerts: 8,
-        is_flagged: true,
-      },
-    ];
+    const fetchUsers = async () => {
+      try {
+        const data = await apiService.getUsers();
+        // Map backend users to component format
+        const mappedUsers = data.map((user, index) => ({
+          id: user.username, // Use username as ID for timeline/investigate links
+          username: user.username,
+          role: user.role === 'admin' ? 'Administrator' : 'Security Analyst',
+          department: user.role === 'admin' ? 'IT Security' : 'SOC',
+          email: user.email,
+          risk_score: Math.random() * 0.5, // Placeholder - backend doesn't track this yet
+          last_activity: new Date(Date.now() - Math.random() * 24 * 60 * 60 * 1000),
+          total_events: Math.floor(Math.random() * 2000) + 100,
+          total_alerts: Math.floor(Math.random() * 15),
+          is_flagged: Math.random() > 0.7,
+        }));
 
-    setUsers(mockUsers);
-    setSelectedUser(mockUsers[1]); // Default to jane.smith (high risk)
-    setLoading(false);
+        setUsers(mappedUsers);
+        if (mappedUsers.length > 0) {
+          setSelectedUser(mappedUsers[0]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+        setUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
   }, []);
 
   if (loading) {
@@ -114,11 +105,15 @@ const UserProfileCard = () => {
           }}
           className="w-full p-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyber-accent"
         >
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.username} ({user.department})
-            </option>
-          ))}
+          {users.length === 0 ? (
+            <option value="">No users found</option>
+          ) : (
+            users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.username} ({user.role === 'Administrator' ? 'Admin' : 'Analyst'})
+              </option>
+            ))
+          )}
         </select>
       </div>
 
@@ -156,9 +151,9 @@ const UserProfileCard = () => {
             <div className="w-full bg-slate-700 rounded-full h-2">
               <motion.div
                 className={`h-2 rounded-full ${selectedUser.risk_score >= 0.8 ? 'bg-threat-critical' :
-                    selectedUser.risk_score >= 0.6 ? 'bg-threat-high' :
-                      selectedUser.risk_score >= 0.4 ? 'bg-threat-medium' :
-                        'bg-threat-low'
+                  selectedUser.risk_score >= 0.6 ? 'bg-threat-high' :
+                    selectedUser.risk_score >= 0.4 ? 'bg-threat-medium' :
+                      'bg-threat-low'
                   }`}
                 initial={{ width: 0 }}
                 animate={{ width: `${selectedUser.risk_score * 100}%` }}
